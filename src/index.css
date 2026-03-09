@@ -26,9 +26,20 @@ body {
   margin: 0;
   display: flex;
   place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  height: 100%;
+  width: 100%;
+  /* min-width: 320px;
+  min-height: 100vh; */
 }
+
+/* html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  place-items: center;
+} */
 
 h1 {
   font-size: 3.2em;
