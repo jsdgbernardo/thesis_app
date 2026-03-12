@@ -2,7 +2,7 @@ import { useState } from 'react'
 // import reactLogo from './assets/react.svg'
 // import viteLogo from '/vite.svg'
 import './App.css'
-import VoiceControl from './components/VoiceControlGoogle'
+import VoiceControl from './components/VoiceControl'
 // import * as ROSLIB from 'roslib';
 
 function App() {

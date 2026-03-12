@@ -1,73 +1,71 @@
-import { useState, useEffect } from "react"
-import { Model, createRecognizer } from "vosk-browser"
+import { useState, useRef } from "react"
+import { publishVoiceCommand } from "../ros/publishVoice"
 
 function VoiceControl() {
-  const [speechText, setSpeechText] = useState("Loading recognizer...")
+
+  const [speechText, setSpeechText] = useState("Press the mic and speak")
   const [listening, setListening] = useState(false)
-  const [recognizer, setRecognizer] = useState(null)
-  const [ready, setReady] = useState(false)
+  const recognitionRef = useRef(null)
 
-  useEffect(() => {
-    const initVosk = async () => {
-      setSpeechText("Initializing Vosk...")
+  const startListening = () => {
 
-      // Load tiny grammar model (folder with model.json)
-      const model = new Model("/tiny-model") 
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition
 
-      const rec = await createRecognizer({
-        model,
-        sampleRate: 16000,
-        grammar: ["follow me", "stop", "go to milk section", "go to eggs", "thank you"]
-      })
-
-      setRecognizer(rec)
-      setReady(true)
-      setSpeechText("Recognizer ready! Press 🎤 to speak.")
-    }
-
-    initVosk()
-  }, [])
-
-  const startListening = async () => {
-    if (!ready) {
-      alert("Recognizer still loading!")
+    if (!SpeechRecognition) {
+      alert("Speech Recognition not supported in this browser")
       return
     }
 
-    setListening(true)
-    setSpeechText("Listening...")
+    if (listening && recognitionRef.current) {
+      recognitionRef.current.stop()
+      return
+    }
 
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    const audioContext = new AudioContext()
-    const source = audioContext.createMediaStreamSource(stream)
-    const processor = audioContext.createScriptProcessor(4096, 1, 1)
+    const recognition = new SpeechRecognition()
+    recognitionRef.current = recognition
 
-    source.connect(processor)
-    processor.connect(audioContext.destination)
+    recognition.lang = "en-US"
+    recognition.continuous = false
+    recognition.interimResults = true
 
-    processor.onaudioprocess = (e) => {
-      const inputData = e.inputBuffer.getChannelData(0)
-      if (recognizer.acceptWaveform(inputData)) {
-        const result = recognizer.result()
-        if (result.text) setSpeechText(result.text)
-      } else {
-        const partial = recognizer.partialResult()
-        if (partial && partial.partial) setSpeechText(partial.partial)
+    recognition.onstart = () => {
+      setListening(true)
+      setSpeechText("Listening...")
+    }
+
+    recognition.onend = () => {
+      setListening(false)
+      recognitionRef.current = null
+    }
+
+    recognition.onresult = (event) => {
+
+      let transcript = ""
+
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript
+      }
+
+      setSpeechText(transcript)
+
+      const last = event.results[event.results.length - 1]
+
+      if (last.isFinal) {
+        console.log("Final Speech:", transcript)
+
+        // send to ROS
+        publishVoiceCommand(transcript)
       }
     }
 
-    setTimeout(() => {
-      processor.disconnect()
-      source.disconnect()
-      audioContext.close()
-      setListening(false)
-      setSpeechText("Stopped listening. Press 🎤 to speak again.")
-    }, 10000)
+    recognition.start()
   }
 
   return (
     <div style={{ textAlign: "center", padding: "20px" }}>
-      <h2>Vosk Tiny Grammar Demo</h2>
+      <h2>Voice Test</h2>
+
       <div
         style={{
           background: "#f2f2f2",
@@ -75,26 +73,27 @@ function VoiceControl() {
           borderRadius: "10px",
           minHeight: "60px",
           marginBottom: "20px",
-          fontSize: "18px",
+          fontSize: "18px"
         }}
       >
         {speechText}
       </div>
+
       <button
         onClick={startListening}
-        disabled={!ready || listening}
         style={{
           padding: "15px 30px",
           fontSize: "18px",
           borderRadius: "10px",
           border: "none",
-          background: !ready ? "#aaa" : listening ? "#ff4d4d" : "#4CAF50",
+          background: listening ? "#ff4d4d" : "#4CAF50",
           color: "white",
-          cursor: !ready ? "not-allowed" : "pointer",
+          cursor: "pointer"
         }}
       >
-        {!ready ? "Loading..." : listening ? "Listening..." : "🎤 Speak"}
+        {listening ? "Stop Listening" : "🎤 Speak"}
       </button>
+
     </div>
   )
 }
