@@ -1,11 +1,31 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { publishVoiceCommand } from "../ros/publishVoice"
+import * as ROSLIB from "roslib"
+import ros from "../ros/rosConnection"
 
 function VoiceControl() {
 
   const [speechText, setSpeechText] = useState("Press the mic and speak")
   const [listening, setListening] = useState(false)
   const recognitionRef = useRef(null)
+
+  useEffect(() => {
+    const topic = new ROSLIB.Topic({
+      ros: ros,
+      name: "/item_error",
+      messageType: "std_msgs/String"
+    })
+
+    const callback = (msg) => {
+      setSpeechText('Item unavailable: ' + msg.data)
+    }
+
+    topic.subscribe(callback)
+
+    return () => {
+      topic.unsubscribe(callback)
+    }
+  }, [])
 
   const startListening = () => {
 
@@ -37,6 +57,7 @@ function VoiceControl() {
     recognition.onend = () => {
       setListening(false)
       recognitionRef.current = null
+      setSpeechText(prev => (prev === "Listening..." ? "Press the mic and speak" : prev))
     }
 
     recognition.onresult = (event) => {
@@ -64,7 +85,6 @@ function VoiceControl() {
 
   return (
     <div style={{ textAlign: "center", padding: "20px" }}>
-      <h2>Voice Test</h2>
 
       <div
         style={{
