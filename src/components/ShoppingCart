@@ -1,15 +1,15 @@
-// src/components/ShoppingList.jsx
+// src/components/ShoppingCart.jsx
 import { useState, useEffect } from "react"
 import * as ROSLIB from "roslib"
 import ros from "../ros/rosConnection"
 
-function ShoppingList() {
+function ShoppingCart() {
   const [items, setItems] = useState([])
 
   useEffect(() => {
     const topic = new ROSLIB.Topic({
       ros: ros,
-      name: "/shopping_list",        
+      name: "/shopping_cart",        
       messageType: "std_msgs/String"
     })
 
@@ -38,7 +38,7 @@ function ShoppingList() {
             overflowY: "auto",         // enable vertical scroll
         }}
         >
-        <h2>Shopping List</h2>
+        <h2>Shopping Cart</h2>
         <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
             {items.map((item, idx) => (
             <li
@@ -56,4 +56,4 @@ function ShoppingList() {
   )
 }
 
-export default ShoppingList
+export default ShoppingCart
