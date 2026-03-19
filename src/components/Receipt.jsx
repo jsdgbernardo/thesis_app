@@ -4,7 +4,6 @@ import ros from "../ros/rosConnection"
 
 function Receipt() {
   const [items, setItems] = useState([])
-  const [itemCount, setItemCount] = useState(0)
   const [totalPrice, setTotalPrice] = useState(0)
 
   const normalizeReceipt = (data) => {
@@ -16,7 +15,6 @@ function Receipt() {
       if (Array.isArray(data.items)) {
         itemArray = data.items
       } else {
-        // maybe object directly of key: {count, price}
         itemArray = Object.entries(data).map(([name, value]) => ({ name, ...value }))
       }
     } else {
@@ -24,16 +22,16 @@ function Receipt() {
     }
 
     return itemArray.map((item) => {
-      const name = item.name || item.item || item.product || "Unknown"
+      const name = item.name || item.item_name || item.product || "Unknown"
       const qty = Number(item.count ?? item.qty ?? item.quantity ?? 1)
       const price = Number(item.price ?? item.unitPrice ?? item.unit_price ?? 0)
-      const total = Number(item.total ?? qty * price)
+      const subtotal = Number(item.subtotal ?? item.total ?? qty * price)
 
       return {
         name,
         qty: Number.isFinite(qty) ? qty : 0,
         price: Number.isFinite(price) ? price : 0,
-        total: Number.isFinite(total) ? total : 0,
+        subtotal: Number.isFinite(subtotal) ? subtotal : 0,
       }
     })
   }
@@ -49,8 +47,7 @@ function Receipt() {
       let parsed = []
       try {
         parsed = JSON.parse(msg.data)
-      } catch (error) {
-        // fallback to comma-separated values
+      } catch {
         const parts = msg.data
           .split(",")
           .map((s) => s.trim().replace(/_/g, " "))
@@ -60,16 +57,13 @@ function Receipt() {
           const [name, count, price] = p.split(" ")
           const qty = Number(count || 1)
           const unitPrice = Number(price || 0)
-          return { name, count: qty, price: unitPrice, total: qty * unitPrice }
+          return { name, count: qty, price: unitPrice, subtotal: qty * unitPrice }
         })
       }
 
       const normalized = normalizeReceipt(parsed)
       setItems(normalized)
-      const totalQty = normalized.reduce((acc, item) => acc + item.qty, 0)
-      const totalSum = normalized.reduce((acc, item) => acc + item.total, 0)
-      setItemCount(totalQty)
-      setTotalPrice(totalSum)
+      setTotalPrice(normalized.reduce((acc, item) => acc + item.subtotal, 0))
     })
 
     return () => topic.unsubscribe()
@@ -84,30 +78,59 @@ function Receipt() {
         background: "#f2f2f2",
         borderRadius: "10px",
         height: "25vh",
-        overflowY: "auto",
+        overflowY: "auto", 
       }}
     >
       <h2>Receipt</h2>
-      <p>Items: {itemCount}</p>
-      <p>Total: ₱{totalPrice.toFixed(2)}</p>
+
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
         {items.map((item, idx) => (
           <li
             key={`${item.name}-${idx}`}
             style={{
               display: "flex",
-              justifyContent: "space-between",
-              padding: "8px 0",
-              borderBottom: "1px solid #ddd",
+              alignItems: "baseline",
+              padding: "4px 0",
+              gap: "6px",
             }}
           >
-            <span>{item.name}</span>
-            <span>qty: {item.qty}</span>
-            <span>₱{item.price.toFixed(2)}</span>
-            <strong>₱{item.total.toFixed(2)}</strong>
+            {/* (count) item */}
+            <span style={{ whiteSpace: "nowrap" }}>
+              ({item.qty}) {item.name}
+            </span>
+
+            {/* dotted fill */}
+            <span
+              style={{
+                flex: 1,
+                borderBottom: "1px dotted #999",
+                marginBottom: "3px",
+              }}
+            />
+
+            {/* price */}
+            <span style={{ whiteSpace: "nowrap" }}>
+              ₱{item.subtotal.toFixed(2)}
+            </span>
           </li>
         ))}
       </ul>
+
+      {items.length > 0 && (
+        <div
+          style={{
+            marginTop: "10px",
+            paddingTop: "8px",
+            borderTop: "2px solid #333",
+            display: "flex",
+            justifyContent: "space-between",
+            fontWeight: "bold",
+          }}
+        >
+          <span>TOTAL</span>
+          <span>₱{totalPrice.toFixed(2)}</span>
+        </div>
+      )}
     </div>
   )
 }
