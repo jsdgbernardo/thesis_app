@@ -11,6 +11,7 @@ function App() {
     <div className = 'phone-wrapper'>
       <h1>Semi-Autonomous Shopping Cart</h1>
 
+      <Receipt />
       <ShoppingList />
       <VoiceControl />
 
