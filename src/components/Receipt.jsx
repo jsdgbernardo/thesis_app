@@ -44,6 +44,7 @@ function Receipt() {
     })
 
     topic.subscribe((msg) => {
+      console.log("[ROS2 /app/receipt] incoming:", msg)
       let parsed = []
       try {
         parsed = JSON.parse(msg.data)
