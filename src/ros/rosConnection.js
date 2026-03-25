@@ -1,7 +1,7 @@
 import * as ROSLIB from 'roslib'
 
 const ros = new ROSLIB.Ros({
-  url: 'ws://172.36.50.98:9090'
+  url: 'ws://172.36.50.137:9090'
 })
 
 ros.on('connection', () => {
