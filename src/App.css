@@ -42,8 +42,9 @@
 }
 
 .phone-wrapper {
-  aspect-ratio: 9/16;
-  height: 100vh;
+  /* aspect-ratio: 9/16; */
+  /* height: 100vh; */
+  /* height: auto; */
   width: auto;
   background: #fcfcfc;
   color: #242424; /* text color */

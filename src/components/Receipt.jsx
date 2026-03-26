@@ -80,6 +80,7 @@ function Receipt() {
         borderRadius: "10px",
         height: "25vh",
         overflowY: "auto", 
+        width: "95vw"
       }}
     >
       <h2>Receipt</h2>

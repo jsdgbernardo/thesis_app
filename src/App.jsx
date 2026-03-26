@@ -3,6 +3,7 @@ import './App.css'
 import VoiceControl from './components/VoiceControl'
 import ShoppingList from './components/ShoppingList'
 import Receipt from './components/Receipt'
+import MapView from './components/MapView'
 
 function App() {
   const [count, setCount] = useState(0)
@@ -15,6 +16,7 @@ function App() {
       <ShoppingList />
       <Receipt />
       <VoiceControl />
+      <MapView />
 
     </div>
     </>

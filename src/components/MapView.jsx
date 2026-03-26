@@ -1,238 +1,175 @@
-import React, { useEffect, useRef, useState } from 'react'
-import ROSLIB from 'roslib'
+import { useEffect, useState } from "react";
+import { Stage, Layer, Line, Circle, Image as KonvaImage } from "react-konva";
+import ros from "../ros/rosConnection";
 
-export default function MapView({
-  defaultRosbridge = 'ws://localhost:9090',
-  defaultMapTopic = '/map',
-  defaultPathTopic = '/plan',
-  defaultPoseTopic = '/amcl_pose',
-}) {
-  const [rosbridgeUrl, setRosbridgeUrl] = useState(defaultRosbridge)
-  const [mapTopic, setMapTopic] = useState(defaultMapTopic)
-  const [pathTopic, setPathTopic] = useState(defaultPathTopic)
-  const [poseTopic, setPoseTopic] = useState(defaultPoseTopic)
+export default function MapView() {
+  const [mapImage, setMapImage] = useState(null);
+  const [mapInfo, setMapInfo] = useState(null);
+  const [path, setPath] = useState([]);
+  const [cart, setCart] = useState({ x: 0, y: 0, yaw: 0 });
 
-  const [connected, setConnected] = useState(false)
-  const rosRef = useRef(null)
-  const mapMsgRef = useRef(null)
-  const pathMsgRef = useRef(null)
-  const poseMsgRef = useRef(null)
+  const cellScale = 2; // 2 pixels per map cell, adjust as needed
 
-  const canvasRef = useRef(null)
-  const offscreenRef = useRef(null)
-
-  // connect / disconnect
+  // -----------------------------
+  // MAP
+  // -----------------------------
   useEffect(() => {
-    const ros = new ROSLIB.Ros({ url: rosbridgeUrl })
-    rosRef.current = ros
-    ros.on('connection', () => setConnected(true))
-    ros.on('close', () => setConnected(false))
-    ros.on('error', () => setConnected(false))
+    const mapTopic = new window.ROSLIB.Topic({
+      ros,
+      name: "/map",
+      messageType: "nav_msgs/OccupancyGrid",
+    });
 
-    // subscribers
-    const mapListener = new ROSLIB.Topic({ ros, name: mapTopic, messageType: 'nav_msgs/OccupancyGrid' })
-    const pathListener = new ROSLIB.Topic({ ros, name: pathTopic, messageType: 'nav_msgs/Path' })
-    const poseListener = new ROSLIB.Topic({ ros, name: poseTopic, messageType: 'geometry_msgs/PoseWithCovarianceStamped' })
+    mapTopic.subscribe((msg) => {
+      const payload = msg.msg || msg;
 
-    mapListener.subscribe((msg) => {
-      mapMsgRef.current = msg
-      // build offscreen image immediately
-      buildMapImage(msg)
-    })
+      if (!payload.info || !payload.data || payload.data.length === 0) return;
 
-    pathListener.subscribe((msg) => {
-      pathMsgRef.current = msg
-    })
+      const { width, height, resolution, origin } = payload.info;
+      setMapInfo({ width, height, resolution, origin });
 
-    poseListener.subscribe((msg) => {
-      poseMsgRef.current = msg
-    })
+      // Draw map as image
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      const imageData = ctx.createImageData(width, height);
 
-    // render loop
-    let rafId
-    const loop = () => {
-      draw()
-      rafId = requestAnimationFrame(loop)
-    }
-    rafId = requestAnimationFrame(loop)
-
-    return () => {
-      mapListener.unsubscribe()
-      pathListener.unsubscribe()
-      poseListener.unsubscribe()
-      if (rafId) cancelAnimationFrame(rafId)
-      if (ros) ros.close()
-    }
-    // only connect on mount / rosbridgeUrl change
-  }, [rosbridgeUrl, mapTopic, pathTopic, poseTopic])
-
-  function buildMapImage(mapMsg) {
-    if (!mapMsg) return
-    const width = mapMsg.info.width
-    const height = mapMsg.info.height
-    const resolution = mapMsg.info.resolution
-    const origin = mapMsg.info.origin
-    const data = mapMsg.data // array of [-1..100]
-
-    // create ImageData (one pixel per map cell)
-    const image = new ImageData(width, height)
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        // flip vertically because OccupancyGrid typically starts at bottom-left
-        const idx = x + (height - y - 1) * width
-        const v = data[idx]
-        let c
-        if (v === -1) c = 205 // unknown gray
-        else c = 255 - Math.round((v / 100) * 255) // 0 free -> white, 100 occupied -> black
-        const i = (y * width + x) * 4
-        image.data[i] = c
-        image.data[i + 1] = c
-        image.data[i + 2] = c
-        image.data[i + 3] = 255
+      for (let i = 0; i < payload.data.length; i++) {
+        const val = payload.data[i];
+        const color = val === -1 ? 205 : 255 - val * 2;
+        imageData.data[i * 4 + 0] = color;
+        imageData.data[i * 4 + 1] = color;
+        imageData.data[i * 4 + 2] = color;
+        imageData.data[i * 4 + 3] = 255;
       }
-    }
 
-    // store offscreen canvas
-    const off = document.createElement('canvas')
-    off.width = width
-    off.height = height
-    const ctx = off.getContext('2d')
-    ctx.putImageData(image, 0, 0)
-    offscreenRef.current = { canvas: off, width, height, resolution, origin }
-  }
+      ctx.putImageData(imageData, 0, 0);
 
-  function worldToCanvas(x, y) {
-    const off = offscreenRef.current
-    const canvas = canvasRef.current
-    if (!off || !canvas) return [0, 0]
-    const { width: mapW, height: mapH, resolution, origin } = off
-    const cx = (x - origin.position.x) / resolution
-    const cy = (y - origin.position.y) / resolution
-    // map coords to canvas pixels (flip y)
-    const px = (cx / mapW) * canvas.width
-    const py = ((mapH - cy) / mapH) * canvas.height
-    return [px, py]
-  }
+      const img = new window.Image();
+      img.src = canvas.toDataURL();
+      img.onload = () => setMapImage(img);
+    });
 
-  function draw() {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    // clear
-    ctx.fillStyle = '#222'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    return () => mapTopic.unsubscribe();
+  }, [ros]);
 
-    // draw map
-    const off = offscreenRef.current
-    if (off && off.canvas) {
-      // stretch to fit canvas
-      ctx.drawImage(off.canvas, 0, 0, canvas.width, canvas.height)
-    } else {
-      // no map yet
-      ctx.fillStyle = '#333'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
-      ctx.fillStyle = '#fff'
-      ctx.font = '14px sans-serif'
-      ctx.fillText('Waiting for /map (nav_msgs/OccupancyGrid)...', 10, 20)
-    }
-
-    // draw path
-    const path = pathMsgRef.current
-    if (path && path.poses && path.poses.length > 0) {
-      ctx.lineWidth = 3
-      ctx.strokeStyle = 'rgba(40, 200, 40, 0.9)'
-      ctx.beginPath()
-      for (let i = 0; i < path.poses.length; i++) {
-        const p = path.poses[i].pose.position
-        const [px, py] = worldToCanvas(p.x, p.y)
-        if (i === 0) ctx.moveTo(px, py)
-        else ctx.lineTo(px, py)
-      }
-      ctx.stroke()
-
-      // small circles for path points
-      ctx.fillStyle = 'rgba(40,200,40,0.9)'
-      for (let i = 0; i < path.poses.length; i++) {
-        const p = path.poses[i].pose.position
-        const [px, py] = worldToCanvas(p.x, p.y)
-        ctx.beginPath()
-        ctx.arc(px, py, 3, 0, Math.PI * 2)
-        ctx.fill()
-      }
-    }
-
-    // draw robot/cart marker
-    const poseMsg = poseMsgRef.current
-    if (poseMsg && poseMsg.pose && poseMsg.pose.pose) {
-      const p = poseMsg.pose.pose.position
-      const o = poseMsg.pose.pose.orientation
-      const [px, py] = worldToCanvas(p.x, p.y)
-      // get yaw
-      const yaw = Math.atan2(2 * (o.w * o.z + o.x * o.y), 1 - 2 * (o.y * o.y + o.z * o.z))
-      ctx.save()
-      ctx.translate(px, py)
-      ctx.rotate(-yaw) // rotate to match orientation
-      // draw triangle representing cart
-      ctx.fillStyle = '#ff4400'
-      ctx.beginPath()
-      ctx.moveTo(10, 0)
-      ctx.lineTo(-8, -6)
-      ctx.lineTo(-8, 6)
-      ctx.closePath()
-      ctx.fill()
-      ctx.restore()
-    }
-
-    // status text
-    ctx.fillStyle = '#fff'
-    ctx.font = '12px sans-serif'
-    ctx.fillText('ROS bridge: ' + (connected ? 'connected' : 'disconnected'), 10, canvas.height - 10)
-  }
-
-  // resize canvas to container
+  // -----------------------------
+  // PATH
+  // -----------------------------
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const resize = () => {
-      const parent = canvas.parentElement
-      const rect = parent.getBoundingClientRect()
-      canvas.width = Math.max(300, Math.floor(rect.width))
-      canvas.height = Math.max(300, Math.floor(rect.height))
-    }
-    resize()
-    window.addEventListener('resize', resize)
-    return () => window.removeEventListener('resize', resize)
-  }, [])
+    if (!mapInfo) return;
 
+    const pathTopic = new window.ROSLIB.Topic({
+      ros,
+      name: "/best_path",
+      messageType: "nav_msgs/Path",
+    });
+
+    pathTopic.subscribe((msg) => {
+      const payload = msg.msg || msg;
+      if (!payload.poses || payload.poses.length === 0) return;
+
+      const points = payload.poses.flatMap((p) => {
+        if (!p.pose || !p.pose.position) return [0, 0];
+
+        const x =
+          (p.pose.position.x - mapInfo.origin.position.x) / mapInfo.resolution * cellScale;
+        const y =
+          (mapInfo.height - (p.pose.position.y - mapInfo.origin.position.y) / mapInfo.resolution) *
+          cellScale;
+        return [x, y];
+      });
+
+      setPath(points);
+    });
+
+    return () => pathTopic.unsubscribe();
+  }, [ros, mapInfo]);
+
+  // -----------------------------
+  // CART
+  // -----------------------------
+  useEffect(() => {
+    if (!mapInfo) return;
+
+    const poseTopic = new window.ROSLIB.Topic({
+      ros,
+      name: "/amcl_pose",
+      messageType: "geometry_msgs/PoseWithCovarianceStamped",
+    });
+
+    poseTopic.subscribe((msg) => {
+      const payload = msg.msg || msg;
+      if (!payload.pose || !payload.pose.pose) return;
+
+      const pos = payload.pose.pose.position;
+      const q = payload.pose.pose.orientation;
+
+      const x =
+        (pos.x - mapInfo.origin.position.x) / mapInfo.resolution * cellScale;
+      const y =
+        (mapInfo.height - (pos.y - mapInfo.origin.position.y) / mapInfo.resolution) *
+        cellScale;
+
+      const yaw =
+        Math.atan2(
+          2 * (q.w * q.z + q.x * q.y),
+          1 - 2 * (q.y * q.y + q.z * q.z)
+        );
+
+      setCart({ x, y, yaw });
+    });
+
+    return () => poseTopic.unsubscribe();
+  }, [ros, mapInfo]);
+
+  // -----------------------------
+  // RENDER
+  // -----------------------------
   return (
-    <div style={{ padding: 12, color: 'inherit' }}>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-        <input value={rosbridgeUrl} onChange={(e) => setRosbridgeUrl(e.target.value)} style={{ flex: 1 }} />
-        <button onClick={() => {
-          // re-create connection by setting rosbridgeUrl (effect depends on it). A simple way is to toggle it.
-          setRosbridgeUrl((s) => s)
-        }}>{connected ? 'Reconnect' : 'Connect'}</button>
-      </div>
+    <div 
+      style={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        flexDirection: "column"
+      }}
+    >
+      <h2>Map View and Robot Path</h2>
+      <Stage
+        width={mapInfo ? mapInfo.width * cellScale : 400}
+        height={mapInfo ? mapInfo.height * cellScale : 400}
+      >
+        <Layer>
+          {mapImage && (
+            <KonvaImage
+              image={mapImage}
+              width={mapInfo.width * cellScale}
+              height={mapInfo.height * cellScale}
+              scaleY={-1}
+              y={mapInfo.height * cellScale}
+            />
+          )}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-        <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          Map topic
-          <input value={mapTopic} onChange={(e) => setMapTopic(e.target.value)} />
-        </label>
-        <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          Path topic
-          <input value={pathTopic} onChange={(e) => setPathTopic(e.target.value)} />
-        </label>
-        <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          Pose topic
-          <input value={poseTopic} onChange={(e) => setPoseTopic(e.target.value)} />
-        </label>
-      </div>
+          {path.length > 0 && (
+            <Line
+              points={path}
+              stroke="green"
+              strokeWidth={2}
+              lineCap="round"
+              lineJoin="round"
+            />
+          )}
 
-      <div style={{ width: '100%', height: 480, background: '#111', borderRadius: 6, overflow: 'hidden' }}>
-        <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
-      </div>
-
+          <Circle
+            x={cart.x}
+            y={cart.y}
+            radius={5}
+            fill="blue"
+          />
+        </Layer>
+      </Stage>
     </div>
-  )
+  );
 }

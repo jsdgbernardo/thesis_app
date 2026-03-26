@@ -36,6 +36,7 @@ function ShoppingList() {
             borderRadius: "10px",
             height: "25vh",        // max height before scrolling
             overflowY: "auto",         // enable vertical scroll
+            width: "95vw"
         }}
         >
         <h2>Shopping List</h2>

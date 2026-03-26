@@ -84,36 +84,42 @@ function VoiceControl() {
   }
 
   return (
-    <div style={{ textAlign: "center", padding: "20px" }}>
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "center",   // horizontal center
+        alignItems: "center",       // vertical center
+        flexDirection: "column"     // stack elements vertically
+      }}
+    >
+        <div
+          style={{
+            background: "#f2f2f2",
+            padding: "20px",
+            borderRadius: "10px",
+            minHeight: "60px",
+            marginBottom: "20px",
+            fontSize: "18px",
+            width: "95vw"
+          }}
+        >
+          {speechText}
+        </div>
 
-      <div
-        style={{
-          background: "#f2f2f2",
-          padding: "20px",
-          borderRadius: "10px",
-          minHeight: "60px",
-          marginBottom: "20px",
-          fontSize: "18px"
-        }}
-      >
-        {speechText}
-      </div>
-
-      <button
-        onClick={startListening}
-        style={{
-          padding: "15px 30px",
-          fontSize: "18px",
-          borderRadius: "10px",
-          border: "none",
-          background: listening ? "#ff4d4d" : "#4CAF50",
-          color: "white",
-          cursor: "pointer"
-        }}
-      >
-        {listening ? "Stop Listening" : "🎤 Speak"}
-      </button>
-
+        <button
+          onClick={startListening}
+          style={{
+            padding: "15px 30px",
+            fontSize: "18px",
+            borderRadius: "10px",
+            border: "none",
+            background: listening ? "#ff4d4d" : "#4CAF50",
+            color: "white",
+            cursor: "pointer"
+          }}
+        >
+          {listening ? "Stop Listening" : "Speak"}
+        </button>
     </div>
   )
 }
